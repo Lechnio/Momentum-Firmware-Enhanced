@@ -29,6 +29,8 @@ typedef enum {
     SubGhzCustomEventSceneSettingRemoveDuplicates,
     SubGhzCustomEventSceneSettingLock,
     SubGhzCustomEventSceneSettingResetToDefault,
+    SubGhzCustomEventSceneSettingAutoreplayCount,
+    SubGhzCustomEventSceneSettingCounterInc,
 
     SubGhzCustomEventSceneExit,
     SubGhzCustomEventSceneStay,
@@ -69,6 +71,9 @@ typedef enum {
 
     SubGhzCustomEventViewRepeaterStart,
     SubGhzCustomEventViewRepeaterStop,
+
+    SubGhzCustomEventViewAutoreplayStart,
+    SubGhzCustomEventViewAutoreplayNext,
 
     SubGhzCustomEventByteInputDone,
 } SubGhzCustomEvent;

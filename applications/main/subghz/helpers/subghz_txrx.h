@@ -21,7 +21,6 @@ typedef enum {
 } SubGhzTxRxStartTxState;
 
 #define SUBGHZ_TX_MIN_HEAP      (8u * 1024u)
-#define SUBGHZ_TX_MIN_BLOCK     (5u * 1024u)
 #define SUBGHZ_TX_MIN_HEAP_RAW  (14u * 1024u)
 // RAW streaming allocates two large contiguous buffers (stream ~4 KB and the
 // pre-reserved line buffer ~4.6 KB). Require the largest free block to hold both
@@ -134,6 +133,8 @@ float subghz_txrx_get_longitude(SubGhzTxRx* instance);
  * @return SubGhzTxRxStartTxState 
  */
 SubGhzTxRxStartTxState subghz_txrx_tx_start(SubGhzTxRx* instance, FlipperFormat* flipper_format);
+
+bool subghz_txrx_is_async_complete(SubGhzTxRx* instance);
 
 /**
  * Start RX CC1101

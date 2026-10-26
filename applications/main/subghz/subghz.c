@@ -158,6 +158,13 @@ SubGhz* subghz_alloc(bool alloc_for_tx_only) {
             SubGhzViewIdByteInput,
             byte_input_get_view(subghz->byte_input));
 
+        // Number Input
+        subghz->number_input = number_input_alloc();
+        view_dispatcher_add_view(
+            subghz->view_dispatcher,
+            SubGhzViewIdNumberInput,
+            number_input_get_view(subghz->number_input));
+
         // Custom Widget
         subghz->widget = widget_alloc();
         view_dispatcher_add_view(
@@ -206,6 +213,8 @@ SubGhz* subghz_alloc(bool alloc_for_tx_only) {
     subghz->last_settings = subghz_last_settings_alloc();
     size_t preset_count = subghz_setting_get_preset_count(setting);
     subghz_last_settings_load(subghz->last_settings, preset_count);
+    furi_hal_subghz_set_rolling_counter_mult(
+        subghz->last_settings->counter_inc ? (int32_t)subghz->last_settings->counter_inc : 1);
     if(!alloc_for_tx_only) {
         // Make sure we select a frequency available in loaded setting configuration
         uint32_t last_frequency = subghz->last_settings->frequency;
@@ -311,6 +320,10 @@ void subghz_free(SubGhz* subghz, bool alloc_for_tx_only) {
         // ByteInput
         view_dispatcher_remove_view(subghz->view_dispatcher, SubGhzViewIdByteInput);
         byte_input_free(subghz->byte_input);
+
+        // Number Input
+        view_dispatcher_remove_view(subghz->view_dispatcher, SubGhzViewIdNumberInput);
+        number_input_free(subghz->number_input);
 
         // Custom Widget
         view_dispatcher_remove_view(subghz->view_dispatcher, SubGhzViewIdWidget);
@@ -478,6 +491,11 @@ int32_t subghz_app(char* p) {
     if(subghz->timer) {
         furi_timer_stop(subghz->timer);
         furi_timer_free(subghz->timer);
+    }
+
+    if(subghz->autoreplay_timer) {
+        furi_timer_stop(subghz->autoreplay_timer);
+        furi_timer_free(subghz->autoreplay_timer);
     }
 
     furi_hal_power_suppress_charge_exit();

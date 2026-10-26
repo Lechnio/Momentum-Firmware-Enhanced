@@ -27,6 +27,8 @@ ADD_SCENE(subghz, set_seed, SetSeed)
 #define SubGhzSceneStart SubGhzSceneSetType
 #endif
 ADD_SCENE(subghz, save_name, SaveName)
+ADD_SCENE(subghz, autoreplay_count, AutoreplayCount)
+ADD_SCENE(subghz, counter_inc, CounterInc)
 ADD_SCENE(subghz, save_success, SaveSuccess)
 ADD_SCENE(subghz, show_error, ShowError)
 ADD_SCENE(subghz, show_error_sub, ShowErrorSub)

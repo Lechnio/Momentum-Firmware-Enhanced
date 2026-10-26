@@ -14,6 +14,8 @@ enum SubGhzSettingIndex {
     SubGhzSettingIndexRemoveDuplicates,
     SubGhzSettingIndexDeleteOldSignals,
     SubGhzSettingIndexAutosave,
+    SubGhzSettingIndexAutoreplay,
+    SubGhzSettingIndexAutoreplayCount,
     SubGhzSettingIndexIgnoreReversRB2,
     SubGhzSettingIndexIgnoreAlarms,
     SubGhzSettingIndexIgnoreSensors,
@@ -413,6 +415,15 @@ static void subghz_scene_receiver_config_set_autosave(VariableItem* item) {
     subghz->last_settings->autosave = index == 1;
 }
 
+static void subghz_scene_receiver_config_set_autoreplay(VariableItem* item) {
+    SubGhz* subghz = variable_item_get_context(item);
+    uint8_t index = variable_item_get_current_value_index(item);
+
+    variable_item_set_current_value_text(item, combobox_text[index]);
+
+    subghz->last_settings->autoreplay = index == 1;
+}
+
 static inline bool subghz_scene_receiver_config_ignore_filter_get_index(
     SubGhzProtocolFilter filter,
     SubGhzProtocolFilter flag) {
@@ -450,7 +461,10 @@ static void subghz_scene_receiver_config_set_niceflors(VariableItem* item) {
 static void subghz_scene_receiver_config_var_list_enter_callback(void* context, uint32_t index) {
     furi_assert(context);
     SubGhz* subghz = context;
-    if(index == SubGhzSettingIndexRemoveDuplicates) {
+    if(index == SubGhzSettingIndexAutoreplayCount) {
+        view_dispatcher_send_custom_event(
+            subghz->view_dispatcher, SubGhzCustomEventSceneSettingAutoreplayCount);
+    } else if(index == SubGhzSettingIndexRemoveDuplicates) {
         view_dispatcher_send_custom_event(
             subghz->view_dispatcher, SubGhzCustomEventSceneSettingRemoveDuplicates);
     } else if(index == SubGhzSettingIndexLock) {
@@ -486,6 +500,8 @@ static void subghz_scene_receiver_config_var_list_enter_callback(void* context, 
         subghz->repeater = SubGhzRepeaterStateOff;
         subghz->last_settings->delete_old_signals = false;
         subghz->last_settings->autosave = false;
+        subghz->last_settings->autoreplay = false;
+        subghz->last_settings->autoreplay_count = 1;
         subghz->last_settings->tx_power = subghz->tx_power = 0;
 
         subghz_txrx_speaker_set_state(subghz->txrx, speaker_value[default_index]);
@@ -614,6 +630,34 @@ void subghz_scene_receiver_config_on_enter(void* context) {
         value_index = subghz->last_settings->autosave;
         variable_item_set_current_value_index(item, value_index);
         variable_item_set_current_value_text(item, combobox_text[value_index]);
+
+        item = variable_item_list_add(
+            subghz->variable_item_list,
+            "Autoreplay",
+            COMBO_BOX_COUNT,
+            subghz_scene_receiver_config_set_autoreplay,
+            subghz);
+
+        value_index = subghz->last_settings->autoreplay;
+        variable_item_set_current_value_index(item, value_index);
+        variable_item_set_current_value_text(item, combobox_text[value_index]);
+
+        item = variable_item_list_add(
+            subghz->variable_item_list,
+            "Autoreplay Cnt",
+            1,
+            NULL,
+            NULL);
+
+        char autoreplay_cnt_str[12] = {0};
+        snprintf(
+            autoreplay_cnt_str,
+            sizeof(autoreplay_cnt_str),
+            "%u",
+            (unsigned)(subghz->last_settings->autoreplay_count
+                           ? subghz->last_settings->autoreplay_count
+                           : 1u));
+        variable_item_set_current_value_text(item, autoreplay_cnt_str);
 
         item = variable_item_list_add(
             subghz->variable_item_list,
@@ -775,6 +819,13 @@ bool subghz_scene_receiver_config_on_event(void* context, SceneManagerEvent even
             consumed = true;
         } else if(event.event == SubGhzCustomEventSceneSettingResetToDefault) {
             scene_manager_previous_scene(subghz->scene_manager);
+            consumed = true;
+        } else if(event.event == SubGhzCustomEventSceneSettingAutoreplayCount) {
+            scene_manager_set_scene_state(
+                subghz->scene_manager,
+                SubGhzSceneReceiverConfig,
+                SubGhzSettingIndexAutoreplayCount);
+            scene_manager_next_scene(subghz->scene_manager, SubGhzSceneAutoreplayCount);
             consumed = true;
         }
     }

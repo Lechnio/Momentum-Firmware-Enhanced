@@ -63,3 +63,8 @@ void subghz_view_receiver_enable_draw_callback(SubGhzViewReceiver* subghz_receiv
 void subghz_view_receiver_disable_draw_callback(SubGhzViewReceiver* subghz_receiver);
 
 void subghz_view_receiver_exit(void* context);
+
+void subghz_view_receiver_update_item_name(
+    SubGhzViewReceiver* subghz_receiver,
+    uint16_t idx,
+    const char* name);

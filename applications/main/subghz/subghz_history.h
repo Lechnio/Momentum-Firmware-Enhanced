@@ -6,6 +6,7 @@
 #include <furi_hal.h>
 #include <lib/flipper_format/flipper_format.h>
 #include <lib/subghz/types.h>
+#include <lib/subghz/protocols/base.h>
 
 typedef struct SubGhzHistory SubGhzHistory;
 
@@ -182,3 +183,11 @@ void subghz_history_remove_duplicates(SubGhzHistory* instance);
 
 // Check if memory/history is full
 bool subghz_history_full(SubGhzHistory* instance);
+
+/** Regenerate the cached display string for history[idx] from the current decoder state.
+ *  Call after TX has updated the FlipperFormat counter in history (encoder writes back Key).
+ */
+void subghz_history_refresh_item_str(
+    SubGhzHistory* instance,
+    uint16_t idx,
+    SubGhzProtocolDecoderBase* decoder_base);

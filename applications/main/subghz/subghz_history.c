@@ -226,6 +226,20 @@ void subghz_history_get_text_item_menu(SubGhzHistory* instance, FuriString* outp
     furi_string_set(output, item->item_str);
 }
 
+void subghz_history_refresh_item_str(
+    SubGhzHistory* instance,
+    uint16_t idx,
+    SubGhzProtocolDecoderBase* decoder_base) {
+    if(idx >= SubGhzHistoryItemArray_size(instance->history->data)) return;
+    SubGhzHistoryItem* item = SubGhzHistoryItemArray_get(instance->history->data, idx);
+    flipper_format_rewind(item->flipper_string);
+    subghz_protocol_decoder_base_deserialize(decoder_base, item->flipper_string);
+    if(decoder_base->protocol && decoder_base->protocol->decoder &&
+       decoder_base->protocol->decoder->get_string_brief) {
+        decoder_base->protocol->decoder->get_string_brief(decoder_base, item->item_str);
+    }
+}
+
 void subghz_history_get_time_item_menu(SubGhzHistory* instance, FuriString* output, uint16_t idx) {
     SubGhzHistoryItem* item = SubGhzHistoryItemArray_get(instance->history->data, idx);
     DateTime* t = &item->datetime;

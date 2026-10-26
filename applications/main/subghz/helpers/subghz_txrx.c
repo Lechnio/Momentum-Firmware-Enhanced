@@ -309,6 +309,11 @@ static bool subghz_txrx_tx(SubGhzTxRx* instance, uint32_t frequency) {
     return ret;
 }
 
+bool subghz_txrx_is_async_complete(SubGhzTxRx* instance) {
+    furi_assert(instance);
+    return subghz_devices_is_async_complete_tx(instance->radio_device);
+}
+
 SubGhzTxRxStartTxState subghz_txrx_tx_start(SubGhzTxRx* instance, FlipperFormat* flipper_format) {
     furi_assert(instance);
     furi_assert(flipper_format);
@@ -332,16 +337,16 @@ SubGhzTxRxStartTxState subghz_txrx_tx_start(SubGhzTxRx* instance, FlipperFormat*
             break;
         }
 
-        size_t need_heap = SUBGHZ_TX_MIN_HEAP;
-        size_t need_block = SUBGHZ_TX_MIN_BLOCK;
-        if(furi_string_equal(temp_str, "RAW")) {
-            need_heap = SUBGHZ_TX_MIN_HEAP_RAW;
-            need_block = SUBGHZ_TX_MIN_BLOCK_RAW;
-        }
+        bool is_raw = furi_string_equal(temp_str, "RAW");
+        size_t need_heap = is_raw ? SUBGHZ_TX_MIN_HEAP_RAW : SUBGHZ_TX_MIN_HEAP;
         instance->tx_min_heap_required = need_heap;
-        if(memmgr_get_free_heap() < need_heap ||
-           memmgr_heap_get_max_free_block() < need_block) {
-            FURI_LOG_E(TAG, "Not enough memory to start TX");
+        if(memmgr_get_free_heap() < need_heap) {
+            FURI_LOG_E(TAG, "Not enough free heap to start TX");
+            ret = SubGhzTxRxStartTxStateErrorMemory;
+            break;
+        }
+        if(is_raw && memmgr_heap_get_max_free_block() < SUBGHZ_TX_MIN_BLOCK_RAW) {
+            FURI_LOG_E(TAG, "Not enough contiguous heap for RAW TX");
             ret = SubGhzTxRxStartTxStateErrorMemory;
             break;
         }

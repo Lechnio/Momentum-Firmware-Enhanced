@@ -152,6 +152,7 @@ bool subghz_scene_receiver_info_on_event(void* context, SceneManagerEvent event)
             // be guarantee send the required minimum protocol data packets
             // for all of this we use subghz_block_generic_global.endless_tx in protocols _yield function.
             subghz->state_notifications = SubGhzNotificationStateTx;
+            subghz->tx_window_remaining = 2; // 2 more window TXes after this one
             subghz_block_generic_global.endless_tx = true;
             if(!subghz_tx_start(
                    subghz,
@@ -160,6 +161,7 @@ bool subghz_scene_receiver_info_on_event(void* context, SceneManagerEvent event)
                 subghz_txrx_hopper_unpause(subghz->txrx);
                 subghz->state_notifications = SubGhzNotificationStateRx;
                 subghz_block_generic_global.endless_tx = false;
+                subghz->tx_window_remaining = 0;
             }
             return true;
         } else if(event.event == SubGhzCustomEventSceneReceiverInfoTxStop) {
@@ -169,6 +171,10 @@ bool subghz_scene_receiver_info_on_event(void* context, SceneManagerEvent event)
             // send upload "repeat=xx" times, and after will be stoped by the tick event down in this code
             subghz->state_notifications = SubGhzNotificationStateTxWait;
             subghz_block_generic_global.endless_tx = false;
+            // Immediately refresh the display so the counter (already incremented by the encoder
+            // during TxStart's deserialize) is visible without waiting for async TX to complete.
+            widget_reset(subghz->widget);
+            subghz_scene_receiver_info_draw_widget(subghz);
 
             return true;
         } else if(event.event == SubGhzCustomEventSceneReceiverInfoSave) {
@@ -228,7 +234,27 @@ bool subghz_scene_receiver_info_on_event(void* context, SceneManagerEvent event)
                 notification_message(subghz->notifications, &sequence_blink_magenta_10);
             } else {
                 subghz_txrx_stop(subghz->txrx);
-                // update screen
+
+                if(subghz->tx_window_remaining > 0) {
+                    // Send next consecutive counter (+1) for better receiver coverage
+                    subghz->tx_window_remaining--;
+                    int32_t saved_mult = furi_hal_subghz_get_rolling_counter_mult();
+                    furi_hal_subghz_set_rolling_counter_mult(1);
+                    bool ok = subghz_tx_start(
+                        subghz,
+                        subghz_history_get_raw_data(subghz->history, subghz->idx_menu_chosen));
+                    furi_hal_subghz_set_rolling_counter_mult(saved_mult);
+                    if(ok) {
+                        // Stay in TxWait — the next Tick will catch this TX's completion
+                        widget_reset(subghz->widget);
+                        subghz_scene_receiver_info_draw_widget(subghz);
+                        break;
+                    }
+                    // Window TX failed — fall through and finish
+                    subghz->tx_window_remaining = 0;
+                }
+
+                // All window TXes done (or failed): update display and resume RX
                 widget_reset(subghz->widget);
                 subghz_scene_receiver_info_draw_widget(subghz);
 

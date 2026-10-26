@@ -26,6 +26,9 @@ typedef struct {
     uint32_t repeater_state;
     bool enable_sound;
     bool autosave;
+    bool autoreplay;
+    uint32_t autoreplay_count;
+    uint32_t counter_inc;
     float hopping_threshold;
     uint8_t tx_power;
 } SubGhzLastSettings;

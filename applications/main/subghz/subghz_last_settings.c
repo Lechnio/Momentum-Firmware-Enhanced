@@ -21,8 +21,11 @@
 #define SUBGHZ_LAST_SETTING_FIELD_REPEATER          "Repeater"
 #define SUBGHZ_LAST_SETTING_FIELD_ENABLE_SOUND      "Sound"
 #define SUBGHZ_LAST_SETTING_FIELD_AUTOSAVE          "Autosave"
+#define SUBGHZ_LAST_SETTING_FIELD_AUTOREPLAY        "Autoreplay"
+#define SUBGHZ_LAST_SETTING_FIELD_AUTOREPLAY_COUNT  "AutoreplayCount"
 #define SUBGHZ_LAST_SETTING_FIELD_HOPPING_THRESHOLD "HoppingThreshold"
 #define SUBGHZ_LAST_SETTING_FIELD_TX_POWER          "TXPower"
+#define SUBGHZ_LAST_SETTING_FIELD_COUNTER_INC       "CounterInc"
 
 SubGhzLastSettings* subghz_last_settings_alloc(void) {
     SubGhzLastSettings* instance = malloc(sizeof(SubGhzLastSettings));
@@ -137,6 +140,28 @@ void subghz_last_settings_load(SubGhzLastSettings* instance, size_t preset_count
                    fff_data_file, SUBGHZ_LAST_SETTING_FIELD_AUTOSAVE, &instance->autosave, 1)) {
                 flipper_format_rewind(fff_data_file);
             }
+            if(!flipper_format_read_bool(
+                   fff_data_file,
+                   SUBGHZ_LAST_SETTING_FIELD_AUTOREPLAY,
+                   &instance->autoreplay,
+                   1)) {
+                flipper_format_rewind(fff_data_file);
+            }
+            uint32_t autoreplay_count = 1;
+            if(!flipper_format_read_uint32(
+                   fff_data_file,
+                   SUBGHZ_LAST_SETTING_FIELD_AUTOREPLAY_COUNT,
+                   &autoreplay_count,
+                   1)) {
+                flipper_format_rewind(fff_data_file);
+            }
+            instance->autoreplay_count = autoreplay_count ? autoreplay_count : 1;
+            uint32_t counter_inc = 1;
+            if(!flipper_format_read_uint32(
+                   fff_data_file, SUBGHZ_LAST_SETTING_FIELD_COUNTER_INC, &counter_inc, 1)) {
+                flipper_format_rewind(fff_data_file);
+            }
+            instance->counter_inc = counter_inc ? counter_inc : 1;
             if(!flipper_format_read_float(
                    fff_data_file,
                    SUBGHZ_LAST_SETTING_FIELD_HOPPING_THRESHOLD,
@@ -247,6 +272,24 @@ bool subghz_last_settings_save(SubGhzLastSettings* instance) {
         if(!flipper_format_write_bool(
                file, SUBGHZ_LAST_SETTING_FIELD_AUTOSAVE, &instance->autosave, 1)) {
             break;
+        }
+        if(!flipper_format_write_bool(
+               file, SUBGHZ_LAST_SETTING_FIELD_AUTOREPLAY, &instance->autoreplay, 1)) {
+            break;
+        }
+        {
+            uint32_t autoreplay_count = instance->autoreplay_count ? instance->autoreplay_count : 1;
+            if(!flipper_format_write_uint32(
+                   file, SUBGHZ_LAST_SETTING_FIELD_AUTOREPLAY_COUNT, &autoreplay_count, 1)) {
+                break;
+            }
+        }
+        {
+            uint32_t counter_inc = instance->counter_inc ? instance->counter_inc : 1;
+            if(!flipper_format_write_uint32(
+                   file, SUBGHZ_LAST_SETTING_FIELD_COUNTER_INC, &counter_inc, 1)) {
+                break;
+            }
         }
         if(!flipper_format_write_float(
                file,

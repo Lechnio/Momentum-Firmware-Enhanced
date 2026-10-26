@@ -19,6 +19,7 @@
 #include <gui/modules/text_input.h>
 #include <gui/modules/byte_input.h>
 #include <gui/modules/widget.h>
+#include <gui/modules/number_input.h>
 
 #include <subghz/scenes/subghz_scene.h>
 #include <lib/subghz/subghz_worker.h>
@@ -100,6 +101,14 @@ struct SubGhz {
 
     bool fav_timeout;
     FuriTimer* timer;
+
+    uint32_t autoreplay_remaining;
+    uint8_t autoreplay_window_remaining;
+    uint16_t autoreplay_idx;
+    FuriTimer* autoreplay_timer;
+    NumberInput* number_input;
+
+    uint8_t tx_window_remaining;
 
     uint8_t tx_power;
     void* rpc_ctx;

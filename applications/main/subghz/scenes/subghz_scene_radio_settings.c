@@ -36,45 +36,22 @@ const char* const gps_text[GPS_COUNT] = {
     "115200",
 };
 
-#define DEBUG_COUNTER_COUNT 17
-const char* const debug_counter_text[DEBUG_COUNTER_COUNT] = {
-    "+1",
-    "+2",
-    "+3",
-    "+4",
-    "+5",
-    "+10",
-    "+50",
-    "OVFL",
-    "OFEX",
-    "No",
-    "-1",
-    "-2",
-    "-3",
-    "-4",
-    "-5",
-    "-10",
-    "-50",
-};
-const int32_t debug_counter_val[DEBUG_COUNTER_COUNT] = {
-    1,
-    2,
-    3,
-    4,
-    5,
-    10,
-    50,
-    65535,
-    -2147483647,
-    0,
-    -1,
-    -2,
-    -3,
-    -4,
-    -5,
-    -10,
-    -50,
-};
+typedef enum {
+    RadioSettingsIndexModule,
+    RadioSettingsIndexTxPower,
+    RadioSettingsIndexGps,
+    RadioSettingsIndexProtocolNames,
+    RadioSettingsIndexCounterInc,
+    RadioSettingsIndexDebugPin,
+} RadioSettingsIndex;
+
+static void subghz_scene_radio_settings_enter_callback(void* context, uint32_t index) {
+    SubGhz* subghz = context;
+    if(index == RadioSettingsIndexCounterInc) {
+        view_dispatcher_send_custom_event(
+            subghz->view_dispatcher, SubGhzCustomEventSceneSettingCounterInc);
+    }
+}
 
 //TX Power
 #define TX_POWER_COUNT 9
@@ -125,13 +102,6 @@ static void subghz_scene_receiver_config_set_debug_pin(VariableItem* item) {
     variable_item_set_current_value_text(item, debug_pin_text[index]);
 
     subghz_txrx_set_debug_pin_state(subghz->txrx, index == 1);
-}
-
-static void subghz_scene_receiver_config_set_debug_counter(VariableItem* item) {
-    uint8_t index = variable_item_get_current_value_index(item);
-
-    variable_item_set_current_value_text(item, debug_counter_text[index]);
-    furi_hal_subghz_set_rolling_counter_mult(debug_counter_val[index]);
 }
 
 static void subghz_scene_receiver_config_set_gps(VariableItem* item) {
@@ -187,6 +157,8 @@ void subghz_scene_radio_settings_on_enter(void* context) {
     VariableItemList* variable_item_list = subghz->variable_item_list;
     int32_t value_index;
     VariableItem* item;
+    variable_item_list_set_enter_callback(
+        variable_item_list, subghz_scene_radio_settings_enter_callback, subghz);
 
     uint8_t value_count_device = RADIO_DEVICE_COUNT;
     if(subghz_txrx_radio_device_get(subghz->txrx) == SubGhzRadioDeviceTypeInternal &&
@@ -238,20 +210,18 @@ void subghz_scene_radio_settings_on_enter(void* context) {
     variable_item_set_current_value_index(item, value_index);
     variable_item_set_current_value_text(item, on_off_text[value_index]);
 
-    item = variable_item_list_add(
-        variable_item_list,
-        "Counter Incr.",
-        furi_hal_rtc_is_flag_set(FuriHalRtcFlagDebug) ? DEBUG_COUNTER_COUNT : 3,
-        subghz_scene_receiver_config_set_debug_counter,
-        subghz);
-    value_index = value_index_int32(
-        furi_hal_subghz_get_rolling_counter_mult(),
-        debug_counter_val,
-        furi_hal_rtc_is_flag_set(FuriHalRtcFlagDebug) ? DEBUG_COUNTER_COUNT : 3);
-    furi_hal_subghz_set_rolling_counter_mult(debug_counter_val[value_index]);
-
-    variable_item_set_current_value_index(item, value_index);
-    variable_item_set_current_value_text(item, debug_counter_text[value_index]);
+    item = variable_item_list_add(variable_item_list, "Counter Inc.", 1, NULL, NULL);
+    {
+        char cnt_str[12];
+        snprintf(
+            cnt_str,
+            sizeof(cnt_str),
+            "%lu",
+            (unsigned long)(subghz->last_settings->counter_inc
+                                ? subghz->last_settings->counter_inc
+                                : 1u));
+        variable_item_set_current_value_text(item, cnt_str);
+    }
 
     item = variable_item_list_add(
         variable_item_list,
@@ -275,9 +245,12 @@ void subghz_scene_radio_settings_on_enter(void* context) {
 
 bool subghz_scene_radio_settings_on_event(void* context, SceneManagerEvent event) {
     SubGhz* subghz = context;
-    UNUSED(subghz);
-    UNUSED(event);
-
+    if(event.type == SceneManagerEventTypeCustom) {
+        if(event.event == SubGhzCustomEventSceneSettingCounterInc) {
+            scene_manager_next_scene(subghz->scene_manager, SubGhzSceneCounterInc);
+            return true;
+        }
+    }
     return false;
 }
 

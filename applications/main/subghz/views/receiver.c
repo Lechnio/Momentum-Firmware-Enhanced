@@ -280,9 +280,8 @@ void subghz_view_receiver_draw(Canvas* canvas, SubGhzViewReceiverModel* model) {
     canvas_set_color(canvas, ColorBlack);
     canvas_set_font(canvas, FontSecondary);
 
-    if(model->mode == SubGhzViewReceiverModeLive) {
+    if(model->mode == SubGhzViewReceiverModeLive && furi_string_size(model->progress_str) == 0) {
         elements_button_left(canvas, "Config");
-        //canvas_draw_line(canvas, 46, 51, 125, 51);
     } else {
         canvas_draw_line(canvas, 2, 52, 125, 52);
         canvas_draw_str(canvas, 3, 62, furi_string_get_cstr(model->progress_str));
@@ -778,4 +777,22 @@ void subghz_view_receiver_set_idx_menu(SubGhzViewReceiver* subghz_receiver, uint
         },
         true);
     subghz_view_receiver_update_offset(subghz_receiver);
+}
+
+void subghz_view_receiver_update_item_name(
+    SubGhzViewReceiver* subghz_receiver,
+    uint16_t idx,
+    const char* name) {
+    furi_assert(subghz_receiver);
+    with_view_model(
+        subghz_receiver->view,
+        SubGhzViewReceiverModel * model,
+        {
+            if(idx < SubGhzReceiverMenuItemArray_size(model->history->data)) {
+                SubGhzReceiverMenuItem* item =
+                    SubGhzReceiverMenuItemArray_get(model->history->data, idx);
+                furi_string_set(item->item_str, name);
+            }
+        },
+        true);
 }

@@ -122,6 +122,35 @@ void repeater_stop_callback(void* context) {
     scene_manager_handle_custom_event(subghz->scene_manager, SubGhzCustomEventViewRepeaterStop);
 }
 
+static void autoreplay_next_callback(void* context) {
+    SubGhz* subghz = context;
+    view_dispatcher_send_custom_event(
+        subghz->view_dispatcher, SubGhzCustomEventViewAutoreplayNext);
+}
+
+static void autoreplay_refresh_view_item(SubGhz* subghz) {
+    uint16_t idx = subghz->autoreplay_idx;
+    const char* pname = subghz_history_get_protocol_name(subghz->history, idx);
+    if(subghz_txrx_load_decoder_by_name_protocol(subghz->txrx, pname)) {
+        subghz_history_refresh_item_str(
+            subghz->history, idx, subghz_txrx_get_decoder(subghz->txrx));
+        FuriString* s = furi_string_alloc();
+        subghz_history_get_text_item_menu(subghz->history, s, idx);
+        subghz_view_receiver_update_item_name(
+            subghz->subghz_receiver, idx, furi_string_get_cstr(s));
+        furi_string_free(s);
+    }
+}
+
+static void autoreplay_show_progress(SubGhz* subghz) {
+    uint32_t total = subghz->last_settings->autoreplay_count;
+    if(total < 1) total = 1;
+    uint32_t done = total - subghz->autoreplay_remaining;
+    char buf[24];
+    snprintf(buf, sizeof(buf), "AR: %lu/%lu", (unsigned long)done, (unsigned long)total);
+    subghz_view_receiver_add_data_progress(subghz->subghz_receiver, buf);
+}
+
 static void subghz_scene_add_to_history_callback(
     SubGhzReceiver* receiver,
     SubGhzProtocolDecoderBase* decoder_base,
@@ -238,6 +267,12 @@ static void subghz_scene_add_to_history_callback(
             } else {
                 subghz->state_notifications = SubGhzNotificationStateRxDone;
             }
+
+            if(subghz->last_settings->autoreplay) {
+                subghz->autoreplay_idx = idx;
+                view_dispatcher_send_custom_event(
+                    subghz->view_dispatcher, SubGhzCustomEventViewAutoreplayStart);
+            }
         }
         subghz_rx_key_state_set(subghz, SubGhzRxKeyStateAddKey);
     }
@@ -317,6 +352,10 @@ void subghz_scene_receiver_on_enter(void* context) {
     //Set up a timer for the repeater (recycled favorites timeout TX timer!).
     if(!subghz->timer)
         subghz->timer = furi_timer_alloc(repeater_stop_callback, FuriTimerTypeOnce, subghz);
+
+    if(!subghz->autoreplay_timer)
+        subghz->autoreplay_timer =
+            furi_timer_alloc(autoreplay_next_callback, FuriTimerTypeOnce, subghz);
 
     //Remember if the repeater was loaded, and do cleanups we need.
     subghz->repeater = subghz->last_settings->repeater_state;
@@ -453,6 +492,62 @@ bool subghz_scene_receiver_on_event(void* context, SceneManagerEvent event) {
             subghz_rx_key_state_set(subghz, SubGhzRxKeyStateStart);
             subghz->state_notifications = SubGhzNotificationStateRx;
             break;
+        case SubGhzCustomEventViewAutoreplayStart: {
+            subghz_txrx_stop(subghz->txrx);
+            subghz_txrx_hopper_pause(subghz->txrx);
+
+            uint32_t ar_count = subghz->last_settings->autoreplay_count;
+            if(ar_count < 1) ar_count = 1;
+            subghz->autoreplay_remaining = ar_count - 1;
+
+            FlipperFormat* ar_data =
+                subghz_history_get_raw_data(subghz->history, subghz->autoreplay_idx);
+
+            if(subghz_txrx_tx_start(subghz->txrx, ar_data) != SubGhzTxRxStartTxStateOk) {
+                subghz->autoreplay_remaining = 0;
+                subghz_txrx_rx_start(subghz->txrx);
+                subghz_txrx_hopper_unpause(subghz->txrx);
+                subghz_rx_key_state_set(subghz, SubGhzRxKeyStateAddKey);
+                subghz->state_notifications = SubGhzNotificationStateRx;
+            } else {
+                subghz->state_notifications = SubGhzNotificationStateTx;
+                notification_message(subghz->notifications, &subghz_sequence_tx_beep);
+                subghz_rx_key_state_set(subghz, SubGhzRxKeyStateTX);
+                autoreplay_show_progress(subghz);
+                furi_timer_start(subghz->autoreplay_timer, 400);
+            }
+            consumed = true;
+            break;
+        }
+        case SubGhzCustomEventViewAutoreplayNext: {
+            subghz_txrx_stop(subghz->txrx);
+            if(subghz->autoreplay_remaining > 0) {
+                subghz->autoreplay_remaining--;
+                FlipperFormat* ar_data =
+                    subghz_history_get_raw_data(subghz->history, subghz->autoreplay_idx);
+                if(subghz_txrx_tx_start(subghz->txrx, ar_data) == SubGhzTxRxStartTxStateOk) {
+                    notification_message(subghz->notifications, &subghz_sequence_tx_beep);
+                    autoreplay_show_progress(subghz);
+                    furi_timer_start(subghz->autoreplay_timer, 400);
+                } else {
+                    autoreplay_refresh_view_item(subghz);
+                    subghz_txrx_rx_start(subghz->txrx);
+                    subghz_txrx_hopper_unpause(subghz->txrx);
+                    subghz_rx_key_state_set(subghz, SubGhzRxKeyStateAddKey);
+                    subghz->state_notifications = SubGhzNotificationStateRx;
+                    subghz_view_receiver_add_data_progress(subghz->subghz_receiver, "");
+                }
+            } else {
+                autoreplay_refresh_view_item(subghz);
+                subghz_txrx_rx_start(subghz->txrx);
+                subghz_txrx_hopper_unpause(subghz->txrx);
+                subghz_rx_key_state_set(subghz, SubGhzRxKeyStateAddKey);
+                subghz->state_notifications = SubGhzNotificationStateRx;
+                subghz_view_receiver_add_data_progress(subghz->subghz_receiver, "");
+            }
+            consumed = true;
+            break;
+        }
         case SubGhzCustomEventViewReceiverOKLong:
             subghz_txrx_stop(subghz->txrx);
             subghz_txrx_hopper_pause(subghz->txrx);
@@ -508,9 +603,13 @@ bool subghz_scene_receiver_on_event(void* context, SceneManagerEvent event) {
             }
 
             subghz_receiver_rssi(subghz->subghz_receiver, ret_rssi.rssi);
-            subghz_protocol_decoder_bin_raw_data_input_rssi(
-                (SubGhzProtocolDecoderBinRAW*)subghz_txrx_get_decoder(subghz->txrx),
-                ret_rssi.rssi);
+            {
+                SubGhzProtocolDecoderBase* _dec = subghz_txrx_get_decoder(subghz->txrx);
+                if(_dec && strcmp(_dec->protocol->name, SUBGHZ_PROTOCOL_BIN_RAW_NAME) == 0) {
+                    subghz_protocol_decoder_bin_raw_data_input_rssi(
+                        (SubGhzProtocolDecoderBinRAW*)_dec, ret_rssi.rssi);
+                }
+            }
         }
 
         switch(subghz->state_notifications) {
