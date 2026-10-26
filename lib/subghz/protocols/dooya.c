@@ -5,9 +5,17 @@
 #include "../blocks/generic.h"
 #include "../blocks/math.h"
 
+#include "../blocks/custom_btn_i.h"
+
 #define TAG "SubGhzProtocolDooya"
 
 #define DOYA_SINGLE_CHANNEL 0xFF
+
+#define DOOYA_BTN_UP_LONG    0x11
+#define DOOYA_BTN_UP_SHORT   0x1E
+#define DOOYA_BTN_DOWN_LONG  0x33
+#define DOOYA_BTN_DOWN_SHORT 0x3C
+#define DOOYA_BTN_STOP       0x55
 
 static const SubGhzBlockConst subghz_protocol_dooya_const = {
     .te_short = 366,
@@ -93,6 +101,23 @@ void subghz_protocol_encoder_dooya_free(void* context) {
     free(instance);
 }
 
+static void subghz_protocol_dooya_check_remote_controller(SubGhzBlockGeneric* instance);
+
+static uint8_t subghz_protocol_dooya_get_btn_code(void) {
+    switch(subghz_custom_btn_get()) {
+    case SUBGHZ_CUSTOM_BTN_UP:
+        return DOOYA_BTN_UP_LONG;
+    case SUBGHZ_CUSTOM_BTN_DOWN:
+        return DOOYA_BTN_DOWN_LONG;
+    case SUBGHZ_CUSTOM_BTN_LEFT:
+        return DOOYA_BTN_UP_SHORT;
+    case SUBGHZ_CUSTOM_BTN_RIGHT:
+        return DOOYA_BTN_DOWN_SHORT;
+    default:
+        return DOOYA_BTN_STOP;
+    }
+}
+
 /**
  * Generating an upload from data.
  * @param instance Pointer to a SubGhzProtocolEncoderDooya instance
@@ -100,6 +125,13 @@ void subghz_protocol_encoder_dooya_free(void* context) {
  */
 static bool subghz_protocol_encoder_dooya_get_upload(SubGhzProtocolEncoderDooya* instance) {
     furi_assert(instance);
+
+    instance->generic.btn = subghz_protocol_dooya_get_btn_code();
+
+    if(subghz_block_generic_global_button_override_get(&instance->generic.btn))
+        FURI_LOG_D(TAG, "Button sucessfully changed to 0x%X", instance->generic.btn);
+
+    instance->generic.data = (instance->generic.data & 0xFFFFFFFF00ULL) | instance->generic.btn;
 
     size_t index = 0;
     size_t size_upload = (instance->generic.data_count_bit * 2) + 2;
@@ -165,10 +197,28 @@ SubGhzProtocolStatus
         flipper_format_read_uint32(
             flipper_format, "Repeat", (uint32_t*)&instance->encoder.repeat, 1);
 
+        subghz_protocol_dooya_check_remote_controller(&instance->generic);
+
         if(!subghz_protocol_encoder_dooya_get_upload(instance)) {
             ret = SubGhzProtocolStatusErrorEncoderGetUpload;
             break;
         }
+
+        if(!flipper_format_rewind(flipper_format)) {
+            FURI_LOG_E(TAG, "Rewind error");
+            ret = SubGhzProtocolStatusErrorParserOthers;
+            break;
+        }
+        uint8_t key_data[sizeof(uint64_t)] = {0};
+        for(size_t i = 0; i < sizeof(uint64_t); i++) {
+            key_data[sizeof(uint64_t) - i - 1] = (instance->generic.data >> (i * 8)) & 0xFF;
+        }
+        if(!flipper_format_update_hex(flipper_format, "Key", key_data, sizeof(uint64_t))) {
+            FURI_LOG_E(TAG, "Unable to add Key");
+            ret = SubGhzProtocolStatusErrorParserOthers;
+            break;
+        }
+
         instance->encoder.is_running = true;
     } while(false);
 
@@ -347,6 +397,11 @@ static void subghz_protocol_dooya_check_remote_controller(SubGhzBlockGeneric* in
         instance->cnt = DOYA_SINGLE_CHANNEL;
     }
     instance->btn = instance->data & 0xFF;
+
+    if(subghz_custom_btn_get_original() == 0) {
+        subghz_custom_btn_set_original(instance->btn);
+    }
+    subghz_custom_btn_set_max(4);
 }
 
 uint32_t subghz_protocol_decoder_dooya_get_hash_data(void* context) {
@@ -421,7 +476,7 @@ void subghz_protocol_decoder_dooya_get_string(void* context, FuriString* output)
     subghz_protocol_dooya_check_remote_controller(&instance->generic);
 
     // push protocol data to global variable
-    subghz_block_generic_global.btn_is_available = false;
+    subghz_block_generic_global.btn_is_available = true;
     subghz_block_generic_global.current_btn = instance->generic.btn;
     subghz_block_generic_global.btn_length_bit = 8;
     //
